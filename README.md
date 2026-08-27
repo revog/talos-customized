@@ -1,6 +1,6 @@
-# Talos Linux with UFS Support (customized fork)
+# Talos Linux with UFS Support and Extension inclusion Support
 
-Automated builds of [Talos Linux](https://www.talos.dev/) with UFS (Universal Flash Storage) driver support for x86_64 devices.
+Automated builds of [Talos Linux](https://www.talos.dev/) with UFS (Universal Flash Storage) driver support for x86_64 devices and Extension support.
 
 Standard Talos Linux does not include UFS drivers, making it impossible to install on devices with UFS storage. This project provides custom builds with UFS drivers built into the kernel and an enlarged EFI partition for 4096-byte sector compatibility.
 

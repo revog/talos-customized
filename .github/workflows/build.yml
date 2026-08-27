@@ -358,7 +358,7 @@ jobs:
 
           gh release create "${TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "Talos Linux ${{ inputs.talos_version }} with UFS Support" \
+            --title "Talos Linux ${{ inputs.talos_version }} with UFS Support & Extension inclusion Support" \
             --notes "$(cat <<NOTES_EOF
           **Upstream Release Notes:** https://github.com/siderolabs/talos/releases/tag/${{ inputs.talos_version }}
 
