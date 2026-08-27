@@ -1,8 +1,10 @@
-# Talos Linux with UFS Support
+# Talos Linux with UFS Support (customized fork)
 
 Automated builds of [Talos Linux](https://www.talos.dev/) with UFS (Universal Flash Storage) driver support for x86_64 devices.
 
 Standard Talos Linux does not include UFS drivers, making it impossible to install on devices with UFS storage. This project provides custom builds with UFS drivers built into the kernel and an enlarged EFI partition for 4096-byte sector compatibility.
+
+> **This is a fork of [amoyrtil/talos-ufs](https://github.com/amoyrtil/talos-ufs).** In addition to the upstream UFS patches, this fork's `build.yml` bakes a configurable set of [Talos system extensions](https://github.com/siderolabs/extensions) directly into both the boot ISO **and** the installer image, since custom (non-Image-Factory) Talos images don't support the usual schematic-ID based extension selection. See [System Extensions](#system-extensions) below.
 
 ## Supported Hardware
 
@@ -19,6 +21,7 @@ All x86_64 devices with PCI-connected UFS controllers supported by the Linux `uf
 | Device | CPU | UFS | Status |
 |--------|-----|-----|--------|
 | MINISFORUM S100-WLP | Intel N100 (Alder Lake-N) | 256GB UFS 2.1 | ✅ Verified |
+| Beelink EQi Wildcat Lake Core 3 304 | Intel Wildcat Lake Core 3 304 | 512GB UFS 3.1 | ✅ Verified |
 
 We welcome hardware compatibility reports! See [Contributing](#contributing).
 
@@ -48,7 +51,7 @@ Edit the generated config to use the UFS installer:
 machine:
   install:
     disk: /dev/sda  # Your UFS device
-    image: ghcr.io/amoyrtil/talos-ufs-installer:<version>
+    image: ghcr.io/revog/talos-ufs-installer:<version>
 ```
 
 Apply and bootstrap:
@@ -66,24 +69,49 @@ Each release publishes three container images:
 
 | Image | Purpose |
 |-------|---------|
-| `ghcr.io/amoyrtil/talos-ufs-installer:<version>` | Installer for machine config |
-| `ghcr.io/amoyrtil/talos-ufs-imager:<version>` | Generate custom ISOs with system extensions |
-| `ghcr.io/amoyrtil/talos-ufs-kernel:<version>` | Custom kernel with UFS drivers |
+| `ghcr.io/revog/talos-ufs-installer:<version>` | Installer for machine config — includes any configured system extensions |
+| `ghcr.io/revog/talos-ufs-imager:<version>` | Generate custom ISOs with system extensions |
+| `ghcr.io/revog/talos-ufs-kernel:<version>` | Custom kernel with UFS drivers |
 
-## Custom ISO Generation
+## System Extensions
 
-Use the published imager to generate ISOs with system extensions:
+Because this is a custom build (not served through Image Factory), the usual approach of appending an extensions schematic to an official installer image doesn't apply. Instead, extensions are baked directly into the release artifacts by the `build.yml` workflow itself, in two places:
+
+1. The **ISO** (`metal-amd64.iso`) — so extensions are already active in maintenance mode / on first boot.
+2. The **installer image** (`ghcr.io/revog/talos-ufs-installer:<version>`) — the image referenced by `machine.install.image` and used for `talosctl upgrade`. This is the important one: without it, extensions would be lost again on the next upgrade.
+
+### Configuring extensions for automated (scheduled) builds
+
+Set a repository variable once — *Settings → Secrets and variables → Actions → Variables* — named `SYSTEM_EXTENSIONS`, one extension image reference per line, e.g.:
+
+```
+ghcr.io/siderolabs/iscsi-tools:v0.2.0
+ghcr.io/siderolabs/util-linux-tools:2.42.2
+```
+
+`check-release.yml` reads this variable and passes it to `build.yml` on every daily run, so newly published upstream Talos releases automatically get built with these extensions included.
+
+### Configuring extensions for a manual build
+
+Go to *Actions → Build Talos UFS → Run workflow* and fill in the `system_extensions` field (same one-per-line format) alongside `talos_version`.
+
+### Building an ISO with extensions manually (local, one-off)
+
+You can still generate a one-off ISO locally without touching the workflow, same as upstream:
 
 ```bash
 docker run --rm -t -v /dev:/dev --privileged \
-  ghcr.io/amoyrtil/talos-ufs-imager:<version> \
+  ghcr.io/revog/talos-ufs-imager:<version> \
   metal --system-extension-image <extension-image>
 ```
+
+This only affects the ISO, not the installer image — use the workflow's `system_extensions` input if you also need the extension present after an upgrade.
 
 ## Changes from Upstream
 
 1. **Kernel**: UFS drivers built-in (`CONFIG_SCSI_UFSHCD=y`, `CONFIG_SCSI_UFS_BSG=y`, `CONFIG_SCSI_UFS_HWMON=y`, `CONFIG_SCSI_UFSHCD_PCI=y`) with required dependencies (`CONFIG_PM_DEVFREQ`, `CONFIG_PM_OPP`)
 2. **EFI Partition**: Size increased from 100MiB to 512MiB for FAT32 compatibility with 4096-byte sectors
+3. **System Extensions** *(this fork)*: `build.yml` accepts a `system_extensions` input and bakes the listed extension images into both the generated ISO and the installer image — see [System Extensions](#system-extensions)
 
 ## Local Build
 
@@ -156,6 +184,16 @@ docker run --rm --platform linux/amd64 -v $(pwd)/output:/out --privileged \
 ./scripts/verify-build.sh output/metal-amd64.iso
 ```
 
+To build a local installer image with extensions instead (step 6 variant, once imager is pushed):
+
+```bash
+mkdir -p output
+docker run --rm -t -v $(pwd)/output:/out --privileged \
+  localhost:5005/siderolabs/imager:<tag> \
+  installer --system-extension-image ghcr.io/siderolabs/iscsi-tools:v0.14.0
+# Inspect output/, then docker load / tag / push as needed
+```
+
 ## Troubleshooting
 
 ### UFS storage not detected after booting ISO
@@ -188,12 +226,16 @@ When using a local HTTP registry, only configure `mirrors` in machine config. Do
 
 Talos v1.13 changed the `image-%` Makefile target to run the imager container with `--user $(id -u):$(id -g)` (instead of `--privileged`). If `_out` does not exist beforehand, Docker auto-creates it as `root` via the volume mount, and the container running as the host user cannot write to it. `mkdir -p _out` in the Talos source directory before invoking `make installer` resolves the issue.
 
+### `system_extensions` build step doesn't find an installer tarball
+
+The "Rebuild installer with system extensions" step in `build.yml` looks for a `*.tar` file under `_out_ext/`. If the imager build for this Talos version names its output differently, run `docker run --rm ghcr.io/revog/talos-ufs-imager:<version> --help` locally to check the exact `installer` subcommand output path/flags and adjust the step accordingly.
+
 ## How It Works
 
 This project uses GitHub Actions to:
 
-1. **Monitor upstream releases** (`check-release.yml`): Daily check for new stable Talos releases
-2. **Build custom images** (`build.yml`): Apply patches, build kernel, imager, installer, and generate ISO
+1. **Monitor upstream releases** (`check-release.yml`): Daily check for new stable Talos releases; passes the `SYSTEM_EXTENSIONS` repository variable through to `build.yml`
+2. **Build custom images** (`build.yml`): Apply patches, build kernel, imager, installer (with any configured system extensions), and generate the ISO (also with extensions)
 3. **Test patches** (`test.yml`): Validate patches apply cleanly on PRs, with optional kernel build
 
 The pkgs version is automatically resolved from the Talos `Makefile` (`PKGS ?=` variable) to ensure the custom kernel is built against the exact version Talos expects.

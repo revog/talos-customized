@@ -7,6 +7,11 @@ on:
         description: 'Talos version to build (e.g., v1.12.2)'
         required: true
         type: string
+      system_extensions:
+        description: 'System extension images to bake in, one per line (e.g. ghcr.io/siderolabs/iscsi-tools:v0.14.0). Leave empty for none.'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: build-${{ github.workflow }}-${{ inputs.talos_version }}
@@ -136,12 +141,13 @@ jobs:
           # skopeo reads ~/.docker/config.json, so the GHCR login above lets it
           # inspect the project's private packages instead of always missing.
           if skopeo inspect "docker://${IMAGER_IMAGE}:${{ inputs.talos_version }}" &>/dev/null && \
-             skopeo inspect "docker://${INSTALLER_IMAGE}:${{ inputs.talos_version }}" &>/dev/null; then
+             skopeo inspect "docker://${INSTALLER_IMAGE}:${{ inputs.talos_version }}" &>/dev/null && \
+             [ -z "${{ inputs.system_extensions }}" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "Imager and installer images already exist, skipping build."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Images not found, building."
+            echo "Images not found (or extensions requested), building."
           fi
 
       - name: Clone siderolabs/talos
@@ -259,6 +265,42 @@ jobs:
             "docker://localhost:5000/siderolabs/installer:${LOCAL_TAG}" \
             "docker://${INSTALLER_IMAGE}:${VERSION}"
 
+      - name: Rebuild installer with system extensions
+        if: inputs.system_extensions != ''
+        run: |
+          # Rebuild the installer image with system extensions baked in
+          # This is the image referenced by machine.install.image and used for
+          # talosctl upgrade, so extensions must live here, not just in the ISO.
+          mkdir -p _out_ext
+          EXT_ARGS=""
+          while IFS= read -r ext; do
+            ext="$(echo "$ext" | xargs)"  # trim whitespace
+            [ -z "$ext" ] && continue
+            EXT_ARGS="$EXT_ARGS --system-extension-image $ext"
+          done <<< "${{ inputs.system_extensions }}"
+
+          echo "Building installer with extensions:${EXT_ARGS}"
+          docker run --rm -t --platform linux/amd64 \
+            -v "$(pwd)/_out_ext:/out" \
+            --privileged \
+            "${IMAGER_IMAGE}:${{ inputs.talos_version }}" \
+            installer ${EXT_ARGS}
+
+          echo "Contents of _out_ext:"
+          ls -la _out_ext
+
+          IMAGE_TAR=$(find _out_ext -maxdepth 1 -name '*.tar' | head -n1)
+          if [ -z "${IMAGE_TAR}" ]; then
+            echo "No installer tar found in _out_ext - check 'docker run ... imager --help' output for the correct subcommand/flags on this imager build." >&2
+            exit 1
+          fi
+
+          LOADED=$(docker load -i "${IMAGE_TAR}" | sed -n 's/^Loaded image: //p' | tail -n1)
+          echo "Loaded image: ${LOADED}"
+
+          docker tag "${LOADED}" "${INSTALLER_IMAGE}:${{ inputs.talos_version }}"
+          docker push "${INSTALLER_IMAGE}:${{ inputs.talos_version }}"
+
   generate-iso:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -281,11 +323,19 @@ jobs:
       - name: Generate ISO
         run: |
           mkdir -p output
+          EXT_ARGS=""
+          while IFS= read -r ext; do
+            ext="$(echo "$ext" | xargs)"
+            [ -z "$ext" ] && continue
+            EXT_ARGS="$EXT_ARGS --system-extension-image $ext"
+          done <<< "${{ inputs.system_extensions }}"
+
+          echo "Building ISO with extensions:${EXT_ARGS}"
           docker run --rm --platform linux/amd64 \
             -v "$(pwd)/output:/out" \
             --privileged \
             "${{ needs.build-talos.outputs.imager_image }}" \
-            iso --arch amd64
+            iso --arch amd64 ${EXT_ARGS}
 
       - name: Generate checksum
         run: |
@@ -301,30 +351,38 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.talos_version }}-ufs"
+          EXT_NOTE="_None_"
+          if [ -n "${{ inputs.system_extensions }}" ]; then
+            EXT_NOTE=$(echo "${{ inputs.system_extensions }}" | sed '/^\s*$/d' | sed 's/^/- `/;s/$/`/')
+          fi
 
           gh release create "${TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Talos Linux ${{ inputs.talos_version }} with UFS Support" \
-            --notes "$(cat <<'NOTES_EOF'
+            --notes "$(cat <<NOTES_EOF
           **Upstream Release Notes:** https://github.com/siderolabs/talos/releases/tag/${{ inputs.talos_version }}
 
           ## Downloads
 
-          - `metal-amd64.iso` - USB boot installation media
-          - `metal-amd64.iso.sha256` - SHA256 checksum
+          - \`metal-amd64.iso\` - USB boot installation media
+          - \`metal-amd64.iso.sha256\` - SHA256 checksum
 
           ## Changes from Upstream
 
           - UFS drivers (ufshcd-core, ufshcd-pci) built into kernel
           - EFI partition size increased to 512MiB (4096-byte sector support)
 
+          ## System Extensions baked in
+
+          ${EXT_NOTE}
+
           ## Container Images
 
-          ```
+          \`\`\`
           ghcr.io/${{ github.repository_owner }}/talos-ufs-installer:${{ inputs.talos_version }}
           ghcr.io/${{ github.repository_owner }}/talos-ufs-imager:${{ inputs.talos_version }}
           ghcr.io/${{ github.repository_owner }}/talos-ufs-kernel:${{ inputs.talos_version }}
-          ```
+          \`\`\`
 
           ## Installation
 
@@ -332,11 +390,11 @@ jobs:
           2. Disable Secure Boot on device
           3. Boot from USB
           4. Specify the installer in machine config:
-             ```yaml
+             \`\`\`yaml
              machine:
                install:
                  image: ghcr.io/${{ github.repository_owner }}/talos-ufs-installer:${{ inputs.talos_version }}
-             ```
+             \`\`\`
 
           ## Custom ISO Generation
 
@@ -345,13 +403,14 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/talos-ufs-imager:${{ inputs.talos_version }} \
             metal --system-extension-image <extension-image>
           ```
-
           ## Supported Hardware
 
           All x86_64 devices with PCI-connected UFS controllers.
 
           ### Verified
           - MINISFORUM S100-WLP (Intel Alder Lake-N, PCI ID: 8086:54ff)
+          - Beelink EQi (Intel Wildcat Lake Core 3 304, PCI ID: 8086:b0ac)
+
           NOTES_EOF
           )" \
             output/metal-amd64.iso \
