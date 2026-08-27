@@ -53,9 +53,12 @@ jobs:
           #   ghcr.io/siderolabs/util-linux-tools:2.40.4
           SYSTEM_EXTENSIONS: ${{ vars.SYSTEM_EXTENSIONS }}
         run: |
+          # Remove unwanted new line characters
+          SYSTEM_EXTENSIONS_CLEANED=$(echo "${SYSTEM_EXTENSIONS}" | tr -d '\r')
+
           gh workflow run build.yml \
             --repo "${GITHUB_REPOSITORY}" \
             --field talos_version="${{ steps.upstream.outputs.latest }}" \
-            --field system_extensions="${SYSTEM_EXTENSIONS}"
+            --field system_extensions="${SYSTEM_EXTENSIONS_CLEANED}"
 
           echo "Triggered build for Talos ${{ steps.upstream.outputs.latest }}"
