@@ -1,4 +1,4 @@
-name: Build Talos UFS
+name: Build Customized Talos
 
 on:
   workflow_dispatch:
