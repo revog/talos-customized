@@ -280,12 +280,9 @@ jobs:
           done <<< "${{ inputs.system_extensions }}"
 
           echo "Building installer with extensions:${EXT_ARGS}"
-          # Set IMAGE_REGISTRY and  USERNAME with -e flags to avoid imager
-          # searching at "localhost:5000/siderolabs/installer-base" but "ghcr.io/revog/talos-ufs-installer-base"
           docker run --rm -t --platform linux/amd64 \
+            --net=host \
             -v "$(pwd)/_out_ext:/out" \
-            -e IMAGE_REGISTRY=ghcr.io \
-            -e USERNAME=revog \
             --privileged \
             "${IMAGER_IMAGE}:${{ inputs.talos_version }}" \
             installer ${EXT_ARGS}
