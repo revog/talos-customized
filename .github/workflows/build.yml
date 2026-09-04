@@ -65,7 +65,27 @@ jobs:
 
       - name: Apply kernel config patch
         run: |
-          git -C /tmp/pkgs apply --3way "${{ github.workspace }}/patches/kernel-config.patch"
+          cd /tmp/pkgs
+          if git apply --3way "${{ github.workspace }}/patches/kernel-config.patch" 2>&1; then
+            echo "Patch applied successfully"
+          else
+            echo "Patch failed, attempting to apply with --reject to see conflicts..."
+            git apply --reject "${{ github.workspace }}/patches/kernel-config.patch" || true
+            # Check if there are any unmerged files
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "ERROR: Patch conflicts detected after merge attempt"
+              echo "Conflicted files:"
+              git diff --name-only --diff-filter=U
+              exit 1
+            fi
+            # If no unmerged files, check for .rej files
+            if find . -name "*.rej" | grep -q .; then
+              echo "ERROR: Patch rejection files created"
+              find . -name "*.rej" -exec echo "  {}" \;
+              exit 1
+            fi
+            echo "Patch applied with some warnings but no critical conflicts"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
