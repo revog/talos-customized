@@ -10,7 +10,8 @@ index 40c6027..fef2df2 100644
  # CONFIG_PCIE_THERMAL is not set
  # CONFIG_THERMAL_EMULATION is not set
  
- @@ -5770,7 +5771,12 @@ CONFIG_MMC_CQHCI=y
+-@@ -5770,7 +5771,12 @@ CONFIG_MMC_CQHCI=y
++@@ -5770,7 +5771,12 @@
   # CONFIG_MMC_TOSHIBA_PCI is not set
   # CONFIG_MMC_MTK is not set
   CONFIG_MMC_SDHCI_XENON=m
@@ -24,7 +25,8 @@ index 40c6027..fef2df2 100644
   # CONFIG_MEMSTICK is not set
   CONFIG_NEW_LEDS=y
   CONFIG_LEDS_CLASS=y
-@@ -6444,7 +6450,21 @@ CONFIG_RPMSG_VIRTIO=y
+-@@ -6444,7 +6450,21 @@ CONFIG_RPMSG_VIRTIO=y
++@@ -6444,7 +6450,21 @@
   # end of Qualcomm PM Domains
   # end of PM Domains
   
@@ -47,7 +49,8 @@ index 40c6027..fef2df2 100644
   # CONFIG_EXTCON is not set
   # CONFIG_MEMORY is not set
   # CONFIG_IIO is not set
-@@ -6532,6 +6552,7 @@ CONFIG_NVMEM_SYSFS=y
+-@@ -6532,6 +6552,7 @@ CONFIG_NVMEM_SYSFS=y
++@@ -6532,6 +6552,7 @@
   
   # CONFIG_FPGA is not set
   # CONFIG_TEE is not set
