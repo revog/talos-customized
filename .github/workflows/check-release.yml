@@ -18,9 +18,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get the latest stable release (exclude pre-releases)
-          LATEST=$(gh api repos/siderolabs/talos/releases \
-            --jq '[.[] | select(.prerelease == false and .draft == false)] | first | .tag_name')
+          # Highest stable version, not the most recently published one.
+          # The releases API is ordered by date, and upstream ships patch
+          # releases for older minor branches after newer ones (v1.12.12 was
+          # published a day after v1.14.0), so `first` picks up a maintenance
+          # release and pins the whole pipeline to an outdated branch.
+          LATEST=$(gh api "repos/siderolabs/talos/releases?per_page=100" \
+            --jq '.[] | select(.prerelease == false and .draft == false) | .tag_name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -1)
+
+          if [ -z "${LATEST}" ]; then
+            echo "Failed to resolve latest stable Talos release" >&2
+            exit 1
+          fi
 
           echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
           echo "Latest upstream Talos release: ${LATEST}"

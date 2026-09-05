@@ -361,19 +361,25 @@ jobs:
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.talos_version }}
         run: |
-          # Close any open patch-failure issues
+          # Only close the issue for the version that just built. A success for
+          # one version says nothing about the others, so closing every open
+          # patch-failure issue would silently bury unresolved failures.
+          TITLE="Build failed for Talos ${VERSION}"
+
           ISSUES=$(gh issue list \
             --repo "${GITHUB_REPOSITORY}" \
             --label "patch-failure" \
             --state open \
-            --json number \
-            --jq '.[].number' 2>/dev/null || true)
+            --limit 100 \
+            --json number,title 2>/dev/null \
+            | jq -r --arg title "${TITLE}" '.[] | select(.title == $title) | .number' || true)
 
           for ISSUE_NUM in ${ISSUES}; do
             gh issue close "${ISSUE_NUM}" \
               --repo "${GITHUB_REPOSITORY}" \
-              --comment "Automatically closed: build succeeded for ${{ inputs.talos_version }}." || true
+              --comment "Automatically closed: build succeeded for ${VERSION}." || true
           done
 
   notify-failure:
@@ -396,14 +402,17 @@ jobs:
             --color "d93f0b" \
             --repo "${GITHUB_REPOSITORY}" 2>/dev/null || true
 
-          # Check if an open issue already exists for this version
+          # Check if an open issue already exists for this version.
+          # Match the title exactly instead of using --search: GitHub's search
+          # tokenizes the query, so a different version's issue can match and
+          # suppress creation of the one for this version.
           EXISTING=$(gh issue list \
             --repo "${GITHUB_REPOSITORY}" \
             --label "patch-failure" \
             --state open \
-            --search "in:title ${TITLE}" \
-            --json number \
-            --jq 'length')
+            --limit 100 \
+            --json number,title \
+            | jq --arg title "${TITLE}" '[.[] | select(.title == $title)] | length')
 
           if [ "${EXISTING}" -gt 0 ]; then
             echo "Issue already exists for ${VERSION}, skipping creation."
