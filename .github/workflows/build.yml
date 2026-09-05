@@ -273,6 +273,43 @@ jobs:
           skopeo copy --all --src-tls-verify=false \
             "docker://localhost:5000/siderolabs/installer:${LOCAL_TAG}" \
             "docker://${INSTALLER_IMAGE}:${VERSION}"
+            
+      - name: Rebuild installer with system extensions
+        if: inputs.system_extensions != ''
+        run: |
+          # Rebuild the installer image with system extensions baked in
+          # This is the image referenced by machine.install.image and used for
+          # talosctl upgrade, so extensions must live here, not just in the ISO.
+          mkdir -p _out_ext
+          EXT_ARGS=""
+          while IFS= read -r ext; do
+            ext="$(echo "$ext" | xargs)"  # trim whitespace
+            [ -z "$ext" ] && continue
+            EXT_ARGS="$EXT_ARGS --system-extension-image $ext"
+          done <<< "${{ inputs.system_extensions }}"
+
+          echo "Building installer with extensions:${EXT_ARGS}"
+          docker run --rm -t --platform linux/amd64 \
+            --net=host \
+            -v "$(pwd)/_out_ext:/out" \
+            --privileged \
+            "${IMAGER_IMAGE}:${{ inputs.talos_version }}" \
+            installer ${EXT_ARGS}
+
+          echo "Contents of _out_ext:"
+          ls -la _out_ext
+
+          IMAGE_TAR=$(find _out_ext -maxdepth 1 -name '*.tar' | head -n1)
+          if [ -z "${IMAGE_TAR}" ]; then
+            echo "No installer tar found in _out_ext - check 'docker run ... imager --help' output for the correct subcommand/flags on this imager build." >&2
+            exit 1
+          fi
+
+          LOADED=$(docker load -i "${IMAGE_TAR}" | sed -n 's/^Loaded image: //p' | tail -n1)
+          echo "Loaded image: ${LOADED}"
+
+          docker tag "${LOADED}" "${INSTALLER_IMAGE}:${{ inputs.talos_version }}"
+          docker push "${INSTALLER_IMAGE}:${{ inputs.talos_version }}"
 
   generate-iso:
     runs-on: ubuntu-latest
@@ -319,7 +356,7 @@ jobs:
 
           gh release create "${TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "Talos Linux ${{ inputs.talos_version }} with UFS Support" \
+            --title "Talos Linux ${{ inputs.talos_version }} with UFS Support & Extension inclusion Support" \
             --notes "$(cat <<'NOTES_EOF'
           **Upstream Release Notes:** https://github.com/siderolabs/talos/releases/tag/${{ inputs.talos_version }}
 
