@@ -63,13 +63,17 @@ jobs:
 
       - name: Validate kernel config patch
         run: |
-          git -C /tmp/pkgs apply --3way --check \
+          # Apply for real rather than with --check: `git apply --3way --check`
+          # exits 0 even when the 3-way merge conflicts, so it reports success
+          # on exactly the breakage this job exists to catch. The clones are
+          # throwaway, so a real apply costs nothing.
+          git -C /tmp/pkgs apply --3way \
             "${{ github.workspace }}/patches/kernel-config.patch"
           echo "kernel-config.patch applies cleanly"
 
       - name: Validate EFI partition size patch
         run: |
-          git -C /tmp/talos apply --3way --check \
+          git -C /tmp/talos apply --3way \
             "${{ github.workspace }}/patches/efi-partition-size.patch"
           echo "efi-partition-size.patch applies cleanly"
 
