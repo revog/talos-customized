@@ -38,4 +38,16 @@ apply_patch "${PKGS_DIR}" "${PATCHES_DIR}/kernel-config.patch" "pkgs"
 # Apply EFI partition size patch to talos
 apply_patch "${TALOS_DIR}" "${PATCHES_DIR}/efi-partition-size.patch" "talos"
 
+# Talos stages every module in hack/modules-amd64.txt into the initramfs and
+# fails if one is missing. Upstream builds UFS and the simple-ondemand devfreq
+# governor as modules, but kernel-config.patch makes them built-in (=y), so
+# those .ko files never exist. Delete the entries by exact path instead of
+# shipping a patch: this 300+ line list is regenerated on every kernel bump, so
+# a context diff would rot immediately.
+echo "Dropping built-in drivers from the talos module list..."
+MODULE_LIST="${TALOS_DIR}/hack/modules-amd64.txt"
+grep -vE '^kernel/drivers/(ufs/|devfreq/governor_simpleondemand\.ko$)' \
+  "${MODULE_LIST}" > "${MODULE_LIST}.tmp"
+mv "${MODULE_LIST}.tmp" "${MODULE_LIST}"
+
 echo "All patches applied successfully."
