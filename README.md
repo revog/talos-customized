@@ -84,6 +84,7 @@ docker run --rm -t -v /dev:/dev --privileged \
 
 1. **Kernel**: UFS drivers built-in (`CONFIG_SCSI_UFSHCD=y`, `CONFIG_SCSI_UFS_BSG=y`, `CONFIG_SCSI_UFS_HWMON=y`, `CONFIG_SCSI_UFSHCD_PCI=y`) with required dependencies (`CONFIG_PM_DEVFREQ`, `CONFIG_PM_OPP`)
 2. **EFI Partition**: Size increased from 100MiB to 512MiB for FAT32 compatibility with 4096-byte sectors
+3. **Module list**: The UFS and `governor_simpleondemand` entries are removed from Talos's `hack/modules-amd64.txt`, since those drivers are built-in here and the `.ko` files upstream expects do not exist
 
 ## Local Build
 
@@ -171,6 +172,10 @@ Expected output should show `ufshcd-core.ko` and `ufshcd-pci.ko` in `modules.bui
 ### UFS drivers built as modules (=m) don't work
 
 Talos does not auto-load kernel modules in maintenance mode unless they are listed in `hack/modules-amd64.txt`. UFS drivers must be built-in (`=y`), not modules.
+
+### `install: cannot stat '.../ufshcd-core.ko'` during the imager build
+
+Talos stages every module listed in `hack/modules-amd64.txt` into the initramfs and fails if one is missing. Upstream lists the UFS drivers there, but this build makes them built-in, so the `.ko` files never exist. `scripts/apply-patches.sh` removes those entries — make sure it ran against the Talos checkout.
 
 ### FAT32 errors on EFI partition
 

@@ -14,6 +14,8 @@ The build pipeline flows through these stages:
 2. **Patch application** — Two patches modify upstream repos:
    - `patches/kernel-config.patch` → applied to siderolabs/pkgs (`kernel/build/config-amd64`) — enables UFS kernel drivers
    - `patches/efi-partition-size.patch` → applied to siderolabs/talos (`pkg/machinery/imager/quirks/partitions.go`) — increases EFI partition from 100MiB to 512MiB for 4096-byte sector support
+
+   Plus one non-patch edit to siderolabs/talos: the UFS and `governor_simpleondemand` entries are stripped from `hack/modules-amd64.txt`. Talos stages every module in that list into the initramfs and fails if one is missing; those drivers are built-in here, so the `.ko` files upstream expects do not exist. It is a line filter rather than a patch because that 300+ line list is regenerated on every kernel bump, so a context diff would rot immediately.
 3. **Build chain** (in `build.yml`): kernel (6h) → talos imager/installer (2h) → ISO generation (30min)
 4. **Output** — ISO + checksum published as GitHub Release; container images pushed to GHCR (`ghcr.io/amoyrtil/talos-ufs-{kernel,imager,installer}`)
 

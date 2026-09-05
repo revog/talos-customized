@@ -155,6 +155,21 @@ jobs:
         run: |
           git -C /tmp/talos apply --3way "${{ github.workspace }}/patches/efi-partition-size.patch"
 
+      - name: Drop built-in drivers from the Talos module list
+        if: steps.check-talos.outputs.exists == 'false'
+        run: |
+          # Talos stages every module in hack/modules-amd64.txt into the
+          # initramfs and fails if one is missing. Upstream v1.14 builds UFS
+          # and the simple-ondemand devfreq governor as modules, but our kernel
+          # config makes them built-in (=y), so those .ko files never exist.
+          # Delete the entries by exact path instead of shipping a patch: this
+          # 300+ line list is regenerated on every kernel bump, so a context
+          # diff would rot immediately.
+          MODULE_LIST=/tmp/talos/hack/modules-amd64.txt
+          grep -vE '^kernel/drivers/(ufs/|devfreq/governor_simpleondemand\.ko$)' \
+            "${MODULE_LIST}" > "${MODULE_LIST}.tmp"
+          mv "${MODULE_LIST}.tmp" "${MODULE_LIST}"
+
       - name: Install crane
         if: steps.check-talos.outputs.exists == 'false'
         env:
