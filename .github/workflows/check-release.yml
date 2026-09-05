@@ -58,9 +58,16 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Configure the desired extensions once as a repo/org variable
+          # (Settings -> Secrets and variables -> Actions -> Variables ->
+          # SYSTEM_EXTENSIONS), one image ref per line, e.g.:
+          #   ghcr.io/siderolabs/iscsi-tools:v0.14.0
+          #   ghcr.io/siderolabs/util-linux-tools:2.40.4
+          SYSTEM_EXTENSIONS: ${{ vars.SYSTEM_EXTENSIONS }}
         run: |
           gh workflow run build.yml \
             --repo "${GITHUB_REPOSITORY}" \
-            --field talos_version="${{ steps.upstream.outputs.latest }}"
+            --field talos_version="${{ steps.upstream.outputs.latest }}" \
+            --field system_extensions="${SYSTEM_EXTENSIONS}"
 
           echo "Triggered build for Talos ${{ steps.upstream.outputs.latest }}"
