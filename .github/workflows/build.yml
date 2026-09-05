@@ -296,6 +296,7 @@ jobs:
 
           echo "Building installer with extensions:${EXT_ARGS}"
           docker run --rm -t --platform linux/amd64 \
+            --net=host \
             -v "$(pwd)/_out_ext:/out" \
             --privileged \
             "${IMAGER_IMAGE}:${{ inputs.talos_version }}" \
