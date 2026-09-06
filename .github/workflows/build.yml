@@ -326,7 +326,8 @@ jobs:
           mkdir -p _out_ext
           EXT_ARGS=""
           while IFS= read -r ext; do
-            ext="$(echo "$ext" | xargs)"  # trim whitespace
+            # Trimmt Leerzeichen UND entfernt alle versteckten Windows-Wagenrückläufe (\r)
+            ext="$(echo "$ext" | tr -d '\r' | xargs)"
             [ -z "$ext" ] && continue
             EXT_ARGS="$EXT_ARGS --system-extension-image $ext"
           done <<< "${{ inputs.system_extensions }}"
