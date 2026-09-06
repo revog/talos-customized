@@ -342,7 +342,7 @@ jobs:
           mkdir -p output
           EXT_ARGS=""
           while IFS= read -r ext; do
-            ext="$(echo "$ext" | xargs)"
+            ext="$(echo "$ext" | tr -d '\r' | xargs)"
             [ -z "$ext" ] && continue
             EXT_ARGS="$EXT_ARGS --system-extension-image $ext"
           done <<< "${{ inputs.system_extensions }}"
