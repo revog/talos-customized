@@ -1,5 +1,17 @@
 # Talos Linux with UFS Support
 
+> [!IMPORTANT]
+> **This project is archived and no longer maintained. Talos Linux v1.14.0 ships UFS support upstream.**
+>
+> As of [Talos v1.14.0](https://github.com/siderolabs/talos/releases/tag/v1.14.0), the stock kernel includes the UFS drivers this project existed to add ([siderolabs/pkgs#1619](https://github.com/siderolabs/pkgs/issues/1619)). A bare-metal install of the official v1.14.0 ISO on a Beelink EQi Wildcat Lake Core 3 304 (and probably others aswell)  — no patches, no custom installer — brings the UFS disk up as a normal `/dev/sd*` device through `ufshcd` and completes successfully.
+>
+> **What to use instead:** the official ISOs and images from [siderolabs/talos](https://github.com/siderolabs/talos/releases). Remove the custom `image:` override under `machine.install` from your machine config; nothing from this repository is required anymore.
+>
+> **Existing releases stay available.** [Past releases](../../releases) and the images on GHCR remain downloadable for anyone still on Talos v1.13 or earlier, but they will receive no further updates. Upgrading to v1.14.0 or later is the recommended path.
+>
+> The repository stays readable after archiving — the patches, workflows, and troubleshooting notes remain here for reference.
+
+
 Automated builds of [Talos Linux](https://www.talos.dev/) with UFS (Universal Flash Storage) driver support for x86_64 devices.
 
 Standard Talos Linux does not include UFS drivers, making it impossible to install on devices with UFS storage. This project provides custom builds with UFS drivers built into the kernel and an enlarged EFI partition for 4096-byte sector compatibility.
